@@ -1,4 +1,3 @@
-
 var baseUrl = 'https://rest.ehrscape.com/rest/v1';
 var queryUrl = baseUrl + '/query';
 
@@ -15,7 +14,7 @@ function getSessionId() {
     return response.responseJSON.sessionId;
 }
 
-
+var uporabniki = [ ];
 function kreirajEHRzaBolnika() {
 	sessionId = getSessionId();
 
@@ -145,7 +144,7 @@ function dodajMeritveVitalnihZnakov() {
 }
 
 
-function preberiMeritveVitalnihZnakov() {
+/*function preberiMeritveVitalnihZnakov() {
 	sessionId = getSessionId();	
 
 	var ehrId = $("#meritveVitalnihZnakovEHRid").val();
@@ -248,7 +247,46 @@ function preberiMeritveVitalnihZnakov() {
 		});
 	}
 }
+*/
+function ustvariUporabnika(ime, priimek, datum)
+{
 
+
+		$.ajaxSetup({
+		    headers: {"Ehr-Session": sessionId}
+		});
+		$.ajax({
+		    url: baseUrl + "/ehr",
+		    type: 'POST',
+		    success: function (data) {
+		        var ehrId = data.ehrId;
+		        var partyData = {
+		            firstNames: ime,
+		            lastNames: priimek,
+		            dateOfBirth: datum,
+		            partyAdditionalInfo: [{key: "ehrId", value: ehrId}]
+		        };
+		        $.ajax({
+		            url: baseUrl + "/demographics/party",
+		            type: 'POST',
+		            contentType: 'application/json',
+		            data: JSON.stringify(partyData),
+		            success: function (party) {
+		                if (party.action == 'CREATE') {
+		                    $("#obvestiloNarediUporabnika").html("<span class='obvestilo label label-success fade-in'>Uspešno kreiran EHR '" + ehrId + "'.</span>");
+		                    console.log("Uspešno kreiran uporabnik'" + ehrId + "'.");
+		                    uporabniki[uporabniki.length] = ehrId;
+		                }
+		            },
+		            error: function(err) {
+		            	$("#kreirajSporocilo").html("<span class='obvestilo label label-danger fade-in'>Napaka '" + JSON.parse(err.responseText).userMessage + "'!");
+		            	console.log(JSON.parse(err.responseText).userMessage);
+		            }
+		        });
+		    }
+		});
+		
+}
 
 $(document).ready(function() {
 	$('#preberiObstojeciEHR').change(function() {
@@ -281,3 +319,136 @@ $(document).ready(function() {
 		$("#meritveVitalnihZnakovEHRid").val($(this).val());
 	});
 });
+
+function narediTestnegaUporabnika()
+{
+	
+	sessionId = getSessionId();
+	
+	$.when(ustvariUporabnika("Janez","Novak","1993-10-12T09:50"),ustvariUporabnika("Miha","Kovač","1976-10-11T11:50"),ustvariUporabnika("Srečko", "Upokojeni","1943-10-11T11:50")).done(function(){
+		
+		ustvariVitalneZnake(uporabniki[0],"2014-10-13T11:35Z",183,98,36,140,78,"Ana");
+		ustvariVitalneZnake(uporabniki[1],"2014-11-13T11:35Z",170,76,37,130,80,"Miha");
+		ustvariVitalneZnake(uporabniki[2],"2014-11-05T15:12Z",176,70,35,145,76,"Tomaž");
+		
+	
+		
+		
+		
+	})
+
+	
+}
+function ustvariVitalneZnake(uporabnikID, ura, telVis, telTez, telTemp, sisTlak, diaTlak, sestra)
+{
+	
+		sessionId = getSessionId();
+
+	
+		$.ajaxSetup({
+		    headers: {"Ehr-Session": sessionId}
+		});
+		var podatki = {
+			// Preview Structure: https://rest.ehrscape.com/rest/v1/template/Vital%20Signs/example
+		    "ctx/language": "en",
+		    "ctx/territory": "SI",
+		    "ctx/time": ura,
+		    "vital_signs/height_length/any_event/body_height_length": telVis,
+		    "vital_signs/body_weight/any_event/body_weight": telTez,
+		   	"vital_signs/body_temperature/any_event/temperature|magnitude": telTemp,
+		    "vital_signs/body_temperature/any_event/temperature|unit": "°C",
+		    "vital_signs/blood_pressure/any_event/systolic": sisTlak,
+		    "vital_signs/blood_pressure/any_event/diastolic": diaTlak,
+		  //  "vital_signs/indirect_oximetry:0/spo2|numerator": nasicenostKrviSKisikom
+		};
+		var parametriZahteve = {
+		    "ehrId": uporabnikID,
+		    templateId: 'Vital Signs',
+		    format: 'FLAT',
+		    committer: sestra
+		    
+		};
+		$.ajax({
+		    url: baseUrl + "/composition?" + $.param(parametriZahteve),
+		    type: 'POST',
+		    contentType: 'application/json',
+		    data: JSON.stringify(podatki),
+		    success: function (res) {
+		    	console.log(res.meta.href);
+		        $("#dodajMeritveVitalnihZnakovSporocilo").html("<span class='obvestilo label label-success fade-in'>" + res.meta.href + ".</span>");
+		    },
+		    error: function(err) {
+		    	$("#sporociloVitalniZnaki").html("<span class='obvestilo label label-danger fade-in'>Napaka '" + JSON.parse(err.responseText).userMessage + "'!");
+				console.log(JSON.parse(err.responseText).userMessage);
+		    }
+		});
+	
+
+	
+}
+
+
+function narisiGraf()
+{
+var margin = {top: 20, right: 20, bottom: 30, left: 50},
+    width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+var parseDate = d3.time.format("%d-%b-%y").parse;
+
+var x = d3.time.scale()
+    .range([0, width]);
+
+var y = d3.scale.linear()
+    .range([height, 0]);
+
+var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+
+var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left");
+
+var line = d3.svg.line()
+    .x(function(d) { return x(d.date); })
+    .y(function(d) { return y(d.close); });
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+d3.tsv("data.tsv", function(error, data) {
+  data.forEach(function(d) {
+    d.date = parseDate(d.date);
+    d.close = +d.close;
+  });
+
+  x.domain(d3.extent(data, function(d) { return d.date; }));
+  y.domain(d3.extent(data, function(d) { return d.close; }));
+
+  svg.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis);
+
+  svg.append("g")
+      .attr("class", "y axis")
+      .call(yAxis)
+    .append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", ".71em")
+      .style("text-anchor", "end")
+      .text("Price ($)");
+
+  svg.append("path")
+      .datum(data)
+      .attr("class", "line")
+      .attr("d", line);
+});
+
+	
+}
